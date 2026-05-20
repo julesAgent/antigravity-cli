@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 
 ENV PATH="/home/ubuntu/.local/bin:${PATH}"
 
-USER dev
+USER ubuntu
 
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash
 
