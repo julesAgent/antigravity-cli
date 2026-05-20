@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
-
+ENV PATH="/root/.local/bin:${PATH}"
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash
 
 WORKDIR /app
