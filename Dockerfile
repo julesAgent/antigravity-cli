@@ -1,5 +1,6 @@
 FROM ubuntu:24.04
 
+USER root
 RUN apt-get update && apt-get install -y \
     git \
     ripgrep \
@@ -9,16 +10,7 @@ RUN apt-get update && apt-get install -y \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/home/ubuntu/.local/bin:${PATH}"
-
-USER ubuntu
-
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash
 
 WORKDIR /app
-
-USER root
-RUN chown -R ubuntu:ubuntu /app
-USER ubuntu
-
 ENTRYPOINT ["agy"]
