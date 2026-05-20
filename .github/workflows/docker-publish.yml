@@ -1,0 +1,89 @@
+name: Publish to GHCR
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to build (e.g. 1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker:
+    name: Build and Push Docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/v{0}', inputs.version) || '' }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch version
+        id: version
+        run: |
+          VERSION=$(node .github/scripts/version.js)
+          IS_SHA="false"
+          if [ -z "$VERSION" ]; then
+            VERSION=${GITHUB_SHA::7}
+            IS_SHA="true"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_sha=$IS_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare metadata
+        id: meta
+        run: |
+          # Lowercase the repository name to comply with Docker registry standards
+          GHCR_REPO="ghcr.io/${{ github.repository }}"
+          echo "ghcr_repo=${GHCR_REPO,,}" >> "$GITHUB_OUTPUT"
+          
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${{ steps.version.outputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version $VERSION for repo ${GHCR_REPO,,}"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          build-args: |
+            ANTIGRAVITY_VERSION=${{ steps.meta.outputs.version }}
+          tags: |
+            ${{ steps.meta.outputs.ghcr_repo }}:${{ steps.version.outputs.is_sha == 'true' && steps.meta.outputs.version || format('{0}-{1}', steps.meta.outputs.version, github.sha::7) }}
+            ${{ steps.meta.outputs.ghcr_repo }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.ghcr_repo }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Inspect image
+        if: github.event_name != 'pull_request'
+        run: |
+          docker buildx imagetools inspect "${{ steps.meta.outputs.ghcr_repo }}:${{ steps.meta.outputs.version }}"
